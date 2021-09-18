@@ -1,0 +1,112 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: AMI selection based on region
+
+Mappings:
+  MyRegionAMI:
+    ap-south-1:
+      AMIID: ami-0b84c6433cdbe5c3e
+    ap-southeast-1:
+      AMIID: ami-03ca998611da0fe12
+  MyENV:
+    dev:
+      InstanceId: t2.micro
+    prod:
+      InstanceId: t2.micro
+    qa:
+      InstanceId: t2.micro
+
+Parameters:
+  MyKeyName:
+    #Description: Select the KeyName
+    Type: AWS::EC2::KeyPair::KeyName
+  MyEnvList:
+    Description: Select an environment from list
+    Type: String
+    Default: dev
+    AllowedValues:
+      - dev
+      - prod
+      - qa
+
+Conditions:
+  CreateEIPprod: !Equals [!Ref MyEnvList, prod]
+  CreateProdSG: !Equals [!Ref MyEnvList, prod]
+  #CreateDevSG: !Equals [!Ref MyEnvList, dev]
+  CreateDevSG: !Not [{Condition: CreateProdSG}]
+  RegionKey: !And [!Or [!Equals [!Ref 'AWS::Region', ap-south-1], !Equals [!Ref 'AWS::Region', ap-southeast-1]], !Equals [!Ref MyEnvList, dev]]
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: "EC2 Instance creation"
+        Parameters:
+          - MyKeyName
+      - Label:
+          default: "Environment to create EC2 in"
+        Parameters:
+          - MyEnvList
+    ParameterLabels:
+      MyEnvList:
+        default: "Select the environment to create EC2 in"
+      MyKeyName:
+        default: "Select proper key, key cannot be changed unless instance is recreated"
+
+Resources:
+  MyEC2Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !FindInMap
+        - MyRegionAMI
+        - !Ref 'AWS::Region'
+        - AMIID
+      InstanceType: !FindInMap
+        - MyENV
+        - !Ref MyEnvList
+        - InstanceId
+      KeyName: !Ref MyKeyName
+      SecurityGroups: !If [CreateDevSG, [!Ref DevEnvSG], [!Ref ProdEnvSG]]
+      UserData:
+          Fn::Base64: |
+            #!/bin/bash
+            sudo apt update -y
+            sudo apt upgrade -y
+            sudo apt install tomcat8 -y
+            echo "Testing Cloudformation template and userdata for complete EC2 automation" > /var/lib/tomcat8/webapps/ROOT/index.html
+  EIPForprodInstance:
+    Type: AWS::EC2::EIP
+    Condition: CreateEIPprod
+    Properties: 
+      InstanceId: !Ref MyEC2Instance
+  DevEnvSG:
+    Type: AWS::EC2::SecurityGroup
+    Condition: CreateDevSG
+    Properties:
+      GroupDescription: DevEnvSG
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '22'
+          ToPort: '22'
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: '8080'
+          ToPort: '8080'
+          CidrIp: 0.0.0.0/0
+  ProdEnvSG:
+    Type: AWS::EC2::SecurityGroup
+    Condition: CreateProdSG
+    Properties:
+      GroupDescription: ProdEnvSG
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '22'
+          ToPort: '22'
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: '8080'
+          ToPort: '8080'
+          CidrIp: 0.0.0.0/0
+Outputs:
+  AppUrl:
+    Description: "Public URL of the EC2 instance for accessing tomcat pages"
+    Value: !Sub 'http://${MyEC2Instance.PublicDnsName}:8080'

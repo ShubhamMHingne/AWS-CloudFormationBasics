@@ -1,0 +1,36 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Creating an EC2 instance.
+
+Parameters:
+  MyKeyName:
+    Description: Select the KeyName from the list
+    Type: AWS::EC2::KeyPair::KeyName
+  MyAZ:
+    Description: Select the Availability Zone
+    Type: String
+    Default: ap-south-1a
+    AllowedValues:
+      - ap-south-1a
+      - ap-south-1b
+      - ap-south-1c
+
+Resources:
+  EC2Practise:
+    Type: 'AWS::EC2::Instance'
+    Properties:
+      ImageId: ami-0bcf5425cdc1d8a85
+      InstanceType: t2.micro
+      KeyName: !Ref MyKeyName
+      SecurityGroups:
+        - default
+        - !Ref SSHSG
+      AvailabilityZone: !Ref MyAZ
+  SSHSG:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: This is SSH Security Group
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '22'
+          ToPort: '22'
+          CidrIp: 0.0.0.0/0

@@ -1,0 +1,90 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: CFN INIT script
+
+Parameters:
+  KeySelect:
+    Description: AWS Key available in the region
+    Type: AWS::EC2::KeyPair::KeyName
+
+Resources:
+  NewSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: SG for EC2 Instance Creation
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '22'
+          ToPort: '22'
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: '8080'
+          ToPort: '8080'
+          CidrIp: 0.0.0.0/0
+  NewInstance:
+    Type: AWS::EC2::Instance
+    CreationPolicy:
+      ResourceSignal:
+        Timeout: PT10M
+    Metadata:
+      Comment: Install and start a tomcat application
+      AWS::CloudFormation::Key:
+        myconfig:
+          packages:
+            yum:
+              tomcat8: []
+          groups:         #create a group at os level(Only Linux groups are supported)
+            group1: {}
+            group2:
+              gid: "502"
+          users:          #create a user at os level(Only Linux users are supported)
+            user1:
+              groups:
+                - "group1"
+                - "group2"
+              uid: "501"
+              homeDir: "/tmp"              
+          sources:        #download the file and unzip in specific folder location
+            /home/user1: "https://the.earth.li/~sgtatham/putty/latest/putty-0.74.tar.gz"
+          # files:
+          commands:
+            test:
+              command: "echo \"$IAMM\" > tttt.txt"
+              env:
+                IAMM: "This is environment 1"
+              cwd: "~"
+              test: "test ! -e ~/tttt.txt"
+              ignoreErrors: "false"
+            test2:
+              command: "echo \"$IAMM2\" > tttt2.txt"
+              env:
+                IAMM2: "This is environment 2"
+              cwd: "~"
+              test: "test ! -e ~/tttt2.txt"
+              ignoreErrors: "false"
+          services:
+            sysvinit:
+              tomcat8:
+                enabled: "true"
+                ensureRunning: "true"
+    Properties:
+      ImageId: ami-0bcf5425cdc1d8a85
+      InstanceType: t2.micro
+      KeyName: !Ref KeySelect
+      SecurityGroups:
+        - !Ref NewSG
+      UserData:
+        "Fn::Base64":
+          !Sub |
+            #!/bin/bash -xe
+            #Get the latest cfn package
+            yum update tomcat8 aws-cfn-bootstrap -y
+            #Start cfn-init to install all metadata content
+            /opt/aws/bin/cfn-init -s ${AWS::StackId} -r NewInstance --region ${AWS::Region} || error_exit 'Failed to run cfn-init script'
+            #Signal the status from cfn-init
+            /opt/aws/bin/cfn-signal -e $? --stach ${AWS::StackId} -r NewInstance --region ${AWS::Region}
+            #Start cfn-hup so that it keeps listening to any changes to EC2 instance metadata
+            /opt/aws/bin/cfn-hup | error_exit 'Failed to start cfn_hup'
+Outputs:
+  appUrl:
+    Description: Application to access
+    Value: !Sub 'http://${NewInstance.PublicDnsName}:8080'

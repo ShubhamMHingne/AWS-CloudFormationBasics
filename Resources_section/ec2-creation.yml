@@ -1,0 +1,11 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Creating an EC2 instance.
+Resources:
+  EC2Practise:
+    Type: 'AWS::EC2::Instance'
+    Properties:
+      ImageId: ami-0bcf5425cdc1d8a85
+      InstanceType: t2.micro
+      KeyName: cfn-1
+      SecurityGroups:
+        - default
